@@ -9,7 +9,7 @@ void print_error();
 void newLine();
 
 typedef enum{
-	TYPE_INT=10,TYPE_DOUBLE,TYPE_BOOL,TYPE_CHAR
+	TYPE_INT=10,TYPE_FLOAT,TYPE_DOUBLE,TYPE_BOOL,TYPE_CHAR
 } TYPES;
 
 typedef enum{
@@ -42,13 +42,17 @@ typedef enum{
 
 typedef enum{
 	TOKEN_ID = 300,TOKEN_STRING, TOKEN_CHAR, TOKEN_INTEGER, 
-	TOKEN_DOUBLE,TOKEN_SCI
+	TOKEN_FLOAT,TOKEN_DOUBLE
 } TokenType;
 
 typedef enum{
 	OTHER_SPACE=500,OTHER_COMMENT,OTHER_MULTICOMMENT,OTHRE_SOURCEON,
 	OTHER_SOURCEOFF,OTHER_TOKENON,OTHER_TOKENOFF
 } Others;
+
+typedef enum{
+	MACRO_NULL=600, MACRO_COUNTER, MACRO_LINE, MACRO_INT_MAX, MACRO_INT_MIN, MACRO_CHAR_MAX, MACRO_CHAR_MIN, MACRO_MAX, MACRO_MIN
+} Macro;
 %}
 
 
@@ -60,15 +64,17 @@ STRING 			(\042[^\042\n]*\042)
 CHARACTER		(\047[^\047\n]\047)
 MULTI_CHAR		(\047[^\047\n]+\047)
 UNTERM_CHAR		(\047[^\047\n]*)
-INTEGER_ZERO	(0)
+INTEGER_ZERO	([-+]?0)
 INTEGER			([1-9]+[0-9]*)
+INTEGER_NEGATIVE([-][1-9]+[0-9]*)
 INTEGER_INVALID	(0[0-9]+)
+FLOAT			^[-+]?[0-9]*[.][0-9]?+$
 DOUBLE 			([1-9]+[0-9]*"."[0-9]+)
 DOUBLE_ZERO		(0.[0-9]+)
 DOUBLE_INVALID	([0-9]+".")
-SCI_NOTATION	([0-9]+["."[0-9]*]?[eE][+-]?[0-9]+)
-SCI_INVALID		([0-9]+["."[0-9]*]?[eE][+-]?[0-9]+"."[0-9]*)
-KEY_WORDS		("double"|"int"|"char"|"bool"|"void"|"null"|"for"|"while"|"do"|"if"|"else"|"switch"|"return"|"break"|"continue"|"const"|"true"|"false"|"struct"|"case"|"default"|"printf"|"scanf"|"getc"|"gets"|"getchar"|"puts"|"putchar"|"clearerr"|"fopen"|"fclose"|"getw"|"putw"|"fgetc"|"putc"|"fputc"|"fgets"|"fputs"|"feof"|"fseek"|"ftell"|"rewind"|"sprintf"|"sscanf"|"remove"|"fflush")
+
+KEY_WORDS		("float|""double"|"int"|"char"|"bool"|"void"|"null"|"for"|"while"|"do"|"if"|"else"|"switch"|"return"|"break"|"continue"|"const"|"true"|"false"|"struct"|"case"|"default"|"scanf"|"getc"|"gets"|"getchar"|"puts"|"putchar"|"clearerr"|"fopen"|"fclose"|"getw"|"putw"|"fgetc"|"putc"|"fputc"|"fgets"|"fputs"|"feof"|"fseek"|"ftell"|"rewind"|"sprintf"|"sscanf"|"remove"|"fflush")
+MACRO_WORDS     ("NULL"|"__COUNTER__"|"__LINE__"|"INT_MAX"|"INT_MIN"|"CHAR_MAX"|"CHAR_MIN"|"MAX"|"MIN")
 
 SINGLE_COMMENT	("//"[^\n]*)
 
@@ -98,20 +104,21 @@ TOKENON			("#pragma token on")
 {CHARACTER}			{ return TOKEN_CHAR; }
 {MULTI_CHAR}		{ print_error();return 0; }
 {UNTERM_CHAR}		{ print_error();return 0; }
+{INTEGER_NEGATIVE}	{ return TOKEN_INTEGER;}
 {INTEGER}			{ return TOKEN_INTEGER;}
 {INTEGER_ZERO}		{ return TOKEN_INTEGER;}
 {INTEGER_INVALID}	{ print_error();return 0; }
 
+{FLOAT}				{ return TOKEN_FLOAT; }
 {DOUBLE}			{ return TOKEN_DOUBLE; }
 {DOUBLE_ZERO}		{ return TOKEN_DOUBLE; }
 {DOUBLE_INVALID}	{ print_error();return 0; }
-{SCI_NOTATION}		{ return TOKEN_SCI;}
-{SCI_INVALID}		{ print_error();return 0; }
 
 [\n]				{ newLine();}
 [ \t\r]+          	{ return OTHER_SPACE;/* ignore all spaces */ }
 
 "int"				{ BEGIN(VARDEF);return TYPE_INT; }
+"float"				{ BEGIN(VARDEF);return TYPE_FLOAT;}
 "double"			{ BEGIN(VARDEF);return TYPE_DOUBLE; }
 "bool"				{ BEGIN(VARDEF);return TYPE_BOOL; }
 "char"				{ BEGIN(VARDEF);return TYPE_CHAR; }
@@ -120,6 +127,7 @@ TOKENON			("#pragma token on")
 <VARDEF>[ \t\r]+   	{ return OTHER_SPACE;}
 <VARDEF>"*"			{ return OP_MULTIPLE;}
 <VARDEF>{KEY_WORDS}	{ print_error();return 0; }
+<VARDEF>{MACRO_WORDS}	{ print_error();return 0; }
 <VARDEF>{IDENTIFIER} { BEGIN(INITIAL);return TOKEN_ID; }
 <VARDEF>.			{ print_error();return 0; }
 
@@ -145,7 +153,16 @@ TOKENON			("#pragma token on")
 "case"				{ return KEY_CASE; }
 "default"			{ return KEY_DEFAULT; }
 
-"printf"			{ return STDIO_PRINTF; }
+"NULL"				{ return MACRO_NULL;}
+"__COUNTER__"		{ return MACRO_COUNTER;}
+"__LINE__"			{ return MACRO_LINE; }
+"INT_MAX"			{ return MACRO_INT_MAX; }
+"INT_MIN"			{ return MACRO_INT_MIN; }
+"CHAR_MAX"			{ return MACRO_CHAR_MAX; }
+"CHAR_MIN"			{ return MACRO_CHAR_MIN; }
+"MAX"				{ return MACRO_MAX; }
+"MIN"				{ return MACRO_MIN; }
+
 "scanf"				{ return STDIO_SCANF; }
 "getc"				{ return STDIO_GETC; }
 "gets"				{ return STDIO_GETS; }
@@ -208,7 +225,7 @@ TOKENON			("#pragma token on")
 
 int main(){
 	int token;
-	while(token=yylex()){
+	while((token=yylex())){
 		strcat(cur_line_content,yytext);
 		if(isTokenOn==1){
 			print_token(token);
@@ -222,7 +239,8 @@ int yywrap(){
 }
 
 void print_token(int token){
-	if(token>=10 && token<=13){
+	printf("%d", token);
+	if(token>=10 && token<=14){
 		// type
 		fprintf(stdout,"#key:%s\n",yytext);
 		return;
@@ -238,7 +256,6 @@ void print_token(int token){
 		fprintf(stdout,"#key:%s\n",yytext);
 		return;
 	}
-
 
 	if(token == TOKEN_ID){
 		// identifier
@@ -256,6 +273,11 @@ void print_token(int token){
 		fprintf(stdout,"#punc:%s\n",yytext);
 		return;
 	}
+	if(token>=600 && token<=608){
+		// marco
+		fprintf(stdout,"#marco:%s\n", yytext);
+		return;
+	}
 	if(token == TOKEN_STRING){
 		// string
 		char text[256];
@@ -264,7 +286,7 @@ void print_token(int token){
 			text[i-1]=yytext[i];
 		}
 		text[i-1]='\0';
-		fprintf(stdout,"#string:%s\n",text);
+		fprintf(stdout,"#string:\"%s\"\n",text);
 		return;
 	}
 	if(token == TOKEN_CHAR){
@@ -277,18 +299,11 @@ void print_token(int token){
 		fprintf(stdout,"#integer:%s\n",yytext);
 		return;
 	}
-	if(token == TOKEN_DOUBLE){
-		// double
-		fprintf(stdout,"#double:%s\n",yytext);
+	if(token == TOKEN_FLOAT || token == TOKEN_DOUBLE){
+		// float
+		fprintf(stdout,"#float:%s\n",yytext);
 		return;
 	}
-	if(token == TOKEN_SCI){
-		// sci
-		fprintf(stdout,"#sci:%s\n",yytext);
-		return;
-	}
-
-
 }
 void print_error(){
 	fprintf(stderr, "Error at line %d: %s\n",cur_line_num,yytext);
